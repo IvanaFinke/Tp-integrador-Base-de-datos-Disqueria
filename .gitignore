@@ -1,0 +1,9 @@
+# Entorno virtual de Python
+.venv/
+
+# Archivos originales del dataset
+database/data/raw/
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
