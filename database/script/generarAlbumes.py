@@ -5,138 +5,142 @@ import pandas as pd
 # Rutas
 raiz = Path(__file__).resolve().parents[2]
 
-ruta_reviews = raiz / "database/data/raw/amazon_reviews_MuMu.json"
-ruta_albumes = raiz / "database/data/procesada/albumes.json"
-ruta_salida = raiz / "database/data/procesada/reviews.json"
+ruta_generos = raiz / "database/data/raw/MuMu_dataset_multi-label.csv"
+ruta_metadata = raiz / "database/data/raw/amazon_metadata_MuMu.json"
+ruta_salida = raiz / "database/data/procesada/albumes.json"
 
 # Leer datasets
-df_reviews = pd.read_json(ruta_reviews, lines=True)
-df_albumes = pd.read_json(ruta_albumes)
+df_generos = pd.read_csv(ruta_generos, dtype="string")
+df_metadata = pd.read_json(ruta_metadata)
 
-print("--- DATASET ORIGINAL ---")
-print("Reseñas:", len(df_reviews))
+print("--- DATASETS ORIGINALES ---")
+print("Registros metadata:", len(df_metadata))
+print("Registros multi-label:", len(df_generos))
 
 # 1. Validar campos necesarios
-campos_obligatorios = [
-    "reviewerID",
+campos_metadata = [
     "amazon_id",
-    "reviewText",
-    "overall"
+    "title",
+    "imUrl",
+    "artist",
+    "artist_mbid"
 ]
 
-for campo in campos_obligatorios:
-    if campo not in df_reviews.columns:
-        raise ValueError(f"Falta el campo obligatorio: {campo}")
+campos_generos = [
+    "amazon_id",
+    "artist_mbid",
+    "genres"
+]
 
-# 2. Identificar reseñas sin información esencial
-sin_id = df_reviews["amazon_id"].isna()
+for campo in campos_metadata:
+    if campo not in df_metadata.columns:
+        raise ValueError(f"Falta el campo en metadata: {campo}")
 
-sin_texto = (
-    df_reviews["reviewText"].isna()
-    | df_reviews["reviewText"].astype("string").str.strip().eq("")
+for campo in campos_generos:
+    if campo not in df_generos.columns:
+        raise ValueError(f"Falta el campo en multi-label: {campo}")
+
+# 2. Normalizar identificadores
+df_metadata["amazon_id"] = df_metadata["amazon_id"].astype("string").str.strip()
+df_generos["amazon_id"] = df_generos["amazon_id"].astype("string").str.strip()
+
+# 3. Comprobar identificadores duplicados en metadata
+duplicados = df_metadata["amazon_id"].duplicated().sum()
+
+if duplicados > 0:
+    raise ValueError(
+        f"Metadata contiene {duplicados} amazon_id duplicados."
+    )
+
+# 4. Agrupar géneros por álbum
+generos_por_album = (
+    df_generos.dropna(subset=["amazon_id", "genres"])
+    .groupby("amazon_id")["genres"]
+    .apply(
+        lambda filas: list(dict.fromkeys(
+            genero.strip()
+            for fila in filas
+            for genero in fila.split(",")
+            if genero.strip()
+        ))
+    )
+    .reset_index(name="generos")
 )
 
-sin_puntuacion = df_reviews["overall"].isna()
-
-invalidas = sin_id | sin_texto | sin_puntuacion
-
-print("\n--- VALIDACIONES ---")
-print("Sin amazon_id:", sin_id.sum())
-print("Sin texto:", sin_texto.sum())
-print("Sin puntuación:", sin_puntuacion.sum())
-
-df_reviews = df_reviews.loc[~invalidas].copy()
-
-# 3. Validar puntuaciones
-df_reviews["overall"] = pd.to_numeric(
-    df_reviews["overall"], errors="coerce"
+# 5. Obtener y validar el identificador del artista
+artistas_por_album = (
+    df_generos.dropna(subset=["amazon_id", "artist_mbid"])
+    .groupby("amazon_id")["artist_mbid"]
+    .nunique()
 )
 
-df_reviews = df_reviews.loc[
-    df_reviews["overall"].between(1, 5)
+inconsistencias = artistas_por_album[artistas_por_album > 1]
+
+if not inconsistencias.empty:
+    raise ValueError(
+        "Hay álbumes asociados a más de un artist_mbid en el CSV. "
+        f"Ejemplos: {inconsistencias.head().index.tolist()}"
+    )
+
+# 6. Unir metadata con géneros
+albumes = df_metadata.merge(
+    generos_por_album,
+    on="amazon_id",
+    how="inner",
+    validate="one_to_one"
+)
+
+# 7. Crear documentos con la estructura de MongoDB
+albumes = albumes.rename(
+    columns={
+        "amazon_id": "_id",
+        "title": "titulo",
+        "imUrl": "img_url"
+    }
+)
+
+albumes["artista"] = albumes.apply(
+    lambda fila: {
+        "nombre": fila["artist"],
+        "mbid": fila["artist_mbid"]
+    },
+    axis=1
+)
+
+# 8. Eliminar álbumes sin título
+sin_titulo = (
+    albumes["titulo"].isna()
+    | albumes["titulo"].astype("string").str.strip().eq("")
+    | albumes["titulo"].astype("string").str.strip().str.lower().isin(
+        ["unknown", "n/a"]
+    )
+)
+
+print("\nÁlbumes sin título:", sin_titulo.sum())
+
+albumes = albumes.loc[~sin_titulo].copy()
+
+# 9. Conservar únicamente los campos del modelo documental
+albumes = albumes[
+    ["_id", "titulo", "img_url", "artista", "generos"]
 ].copy()
 
-# 4. Conservar reseñas de álbumes disponibles
-ids_albumes = set(
-    df_albumes["amazon_id"].dropna().astype(str)
-)
+# 10. Validaciones finales
+if albumes["_id"].duplicated().any():
+    raise ValueError("Hay _id duplicados en el catálogo.")
 
-df_reviews["amazon_id"] = df_reviews["amazon_id"].astype(str)
+print("\n--- RESULTADO FINAL ---")
+print("Álbumes generados:", len(albumes))
+print("Identificadores duplicados:", albumes["_id"].duplicated().sum())
+print("Títulos nulos:", albumes["titulo"].isna().sum())
+print("Imágenes nulas:", albumes["img_url"].isna().sum())
+print("Artistas nulos:", albumes["artista"].isna().sum())
+print("Álbumes sin géneros:", albumes["generos"].apply(len).eq(0).sum())
 
-sin_album = ~df_reviews["amazon_id"].isin(ids_albumes)
+# 11. Exportar
+ruta_salida.parent.mkdir(parents=True, exist_ok=True)
 
-print("Sin álbum asociado al catálogo:", sin_album.sum())
-
-df_reviews = df_reviews.loc[~sin_album].copy()
-
-# 5. Comprobar duplicados exactos
-reviews_comparacion = df_reviews.copy()
-
-reviews_comparacion["helpful"] = (
-    reviews_comparacion["helpful"].apply(
-        lambda x: tuple(x) if isinstance(x, list) else x
-    )
-)
-
-print(
-    "Reseñas duplicadas exactamente:",
-    reviews_comparacion.duplicated().sum()
-)
-
-# 6. Preparar campos para la selección
-df_reviews["votos_utiles"] = (
-    df_reviews["helpful"].apply(
-        lambda x: x[0] if isinstance(x, list) and len(x) > 0 else 0
-    )
-)
-
-df_reviews["unixReviewTime"] = pd.to_numeric(
-    df_reviews["unixReviewTime"], errors="coerce"
-)
-
-# 7. Ordenar y seleccionar máximo 2 reseñas por álbum
-df_reviews = df_reviews.sort_values(
-    by=["amazon_id", "votos_utiles", "unixReviewTime"],
-    ascending=[True, False, False]
-)
-
-reviews = df_reviews.groupby(
-    "amazon_id",
-    sort=False
-).head(2).copy()
-
-# 8. Seleccionar campos finales
-campos_finales = [
-    "reviewerID",
-    "reviewerName",
-    "amazon_id",
-    "reviewText",
-    "overall",
-    "summary",
-    "helpful",
-    "unixReviewTime",
-    "reviewTime"
-]
-
-campos_disponibles = [
-    campo for campo in campos_finales
-    if campo in reviews.columns
-]
-
-reviews = reviews[campos_disponibles].copy()
-
-# 9. Validar cantidad de reseñas por álbum
-cantidad_por_album = reviews.groupby("amazon_id").size()
-
-print("\n--- SELECCIÓN FINAL ---")
-print("Álbumes con reseñas:", len(cantidad_por_album))
-print("Reseñas seleccionadas:", len(reviews))
-print("Máximo de reseñas por álbum:", cantidad_por_album.max())
-print("Álbumes con una reseña:", (cantidad_por_album == 1).sum())
-print("Álbumes con dos reseñas:", (cantidad_por_album == 2).sum())
-
-# 10. Exportar
-reviews.to_json(
+albumes.to_json(
     ruta_salida,
     orient="records",
     indent=2,
@@ -144,3 +148,4 @@ reviews.to_json(
 )
 
 print("\nArchivo generado:", ruta_salida)
+print("Campos:", albumes.columns.tolist())
