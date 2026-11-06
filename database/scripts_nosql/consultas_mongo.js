@@ -1,64 +1,123 @@
-// consultas de mongodb
-// base: disqueria
-// colecciones: albumes, reseñas
+// disqueria - consultas mongodb
+// colecciones: albumes y resenas
+
 use("disqueria");
 
+
 // 1. indices
-db.resenas.createIndex({ album_id: 1 });      // reseñas de un álbum
-db.albumes.createIndex({ generos: 1 });       // filtro por gen
-db.albumes.createIndex({ titulo: "text" });   // busco x tiutlo 
+
+// resenas de un album
+db.resenas.createIndex({ album_id: 1 });
+
+// filtro por genero
+db.albumes.createIndex({ generos: 1 });
+
+// busqueda por titulo
+db.albumes.createIndex({ titulo: "text" });
 
 
-// 2. crud de albumes
-// C - crear un album
+// 2. validacion
+
+// albumes: titulo, artista y generos obligatorios
+db.runCommand({
+  collMod: "albumes",
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["_id", "titulo", "artista", "generos"],
+      properties: {
+        titulo:  { bsonType: "string", minLength: 1 },
+        img_url: { bsonType: "string" },
+        artista: {
+          bsonType: "object",
+          required: ["nombre"],
+          properties: {
+            nombre: { bsonType: "string", minLength: 1 }
+          }
+        },
+        generos: {
+          bsonType: "array",
+          items: { bsonType: "string" }
+        }
+      }
+    }
+  },
+  validationLevel: "strict",
+  validationAction: "error"
+});
+
+// resenas: puntaje entre 1 y 5
+db.runCommand({
+  collMod: "resenas",
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["album_id", "puntaje", "texto"],
+      properties: {
+        album_id: { bsonType: "string" },
+        puntaje:  { bsonType: ["int", "double"], minimum: 1, maximum: 5 },
+        texto:    { bsonType: "string", minLength: 1 }
+      }
+    }
+  },
+  validationLevel: "strict",
+  validationAction: "error"
+});
+
+
+// 3. crud albumes
+
+// crear
 db.albumes.insertOne({
   _id: "TEST000001",
-  titulo: "album de prueba",
+  titulo: "Album de prueba",
   img_url: "https://ejemplo.com/portada.jpg",
   artista: { nombre: "Artista de prueba", mbid: null },
   generos: ["Rock", "Pop"]
 });
 
-// R - leer un album por su id
+// leer uno
 db.albumes.findOne({ _id: "TEST000001" });
 
-// R - listar albumes (catlogo paginado: pag 1, 20 por pag)
+// listar (pagina 1, 20 por pagina)
 db.albumes.find().sort({ titulo: 1 }).skip(0).limit(20);
 
-// U - modificar un album
+// modificar
 db.albumes.updateOne(
   { _id: "TEST000001" },
-  { $set: { titulo: "album de prueba (editado)", generos: ["Rock"] } }
+  { $set: { titulo: "Album de prueba (editado)", generos: ["Rock"] } }
 );
 
-// D - eliminar un album y sus reseñas
+// eliminar album y sus resenas
 db.albumes.deleteOne({ _id: "TEST000001" });
 db.resenas.deleteMany({ album_id: "TEST000001" });
 
-// 3. busquedas del catalgo
 
-// Filtrar por genero (busca dentro del arreglo generos)
+// 4. busquedas
+
+// por genero
 db.albumes.find({ generos: "Jazz" }).limit(20);
 
-// buscar por palabra en el titulo (usa el indice de texto)
+// por palabra en el titulo
 db.albumes.find({ $text: { $search: "love" } }).limit(20);
 
-// buscar por artista (campo embebido)
+// por artista
 db.albumes.find({ "artista.nombre": "Liz Ramirez" });
 
-// reseñas de un album
+// resenas de un album
 db.resenas.find({ album_id: "1458389375" });
 
-// 4. consultas con agregaciones
-// 4.1 cant de albumes por genero 
+
+// 5. agregaciones
+
+// cantidad de albumes por genero
 db.albumes.aggregate([
   { $unwind: "$generos" },
   { $group: { _id: "$generos", cantidad: { $sum: 1 } } },
   { $sort: { cantidad: -1 } }
 ]);
 
-// 4.2 puntaje promedio por album, con los datos del album
-//     (une reseñas con albumes mediante $lookup)
+// top 10 albumes por puntaje promedio
 db.resenas.aggregate([
   { $group: {
       _id: "$album_id",
@@ -84,7 +143,7 @@ db.resenas.aggregate([
   { $limit: 10 }
 ]);
 
-// 4.3 puntaje promedio por genero
+// puntaje promedio por genero
 db.resenas.aggregate([
   { $lookup: {
       from: "albumes",
