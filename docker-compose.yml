@@ -1,0 +1,31 @@
+# Antes: node database/script/generarDatosIniciales.js
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: disqueria-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./database/modelo_relacional.sql:/docker-entrypoint-initdb.d/01_modelo.sql:ro
+      - ./database/datos_iniciales.sql:/docker-entrypoint-initdb.d/02_datos.sql:ro
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      retries: 30
+
+  mongo:
+    image: mongo:7
+    container_name: disqueria-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./database/scripts_nosql:/docker-entrypoint-initdb.d:ro
+      - ./database/data/procesada:/data/import:ro
+      - mongo-data:/data/db
+
+volumes:
+  mysql-data:
+  mongo-data:

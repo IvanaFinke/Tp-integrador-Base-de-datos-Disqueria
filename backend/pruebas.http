@@ -1,0 +1,91 @@
+# Pruebas del backend. Requiere la extensión "REST Client" de VS Code:
+# aparece "Send Request" arriba de cada request.
+
+@api = http://localhost:3000/api
+
+### Estado de las dos bases y qué guarda cada una
+GET {{api}}/salud
+
+### Inicio: recomendados ordenados por precio
+GET {{api}}/recomendados?orden=asc&limite=6
+
+### Búsqueda por título o género
+GET {{api}}/catalogo?texto=jazz&orden=desc&tamanio=5
+
+### Filtro por género exacto
+GET {{api}}/catalogo?genero=Rock&tamanio=5
+
+### Álbum individual con productos y reseñas
+GET {{api}}/albumes/1458389375
+
+### Alta de álbum (copiá el "id" de la respuesta para las siguientes)
+POST {{api}}/albumes
+Content-Type: application/json
+
+{
+  "titulo": "Compass: A new Mili symphony",
+  "artista": "Mili",
+  "imgUrl": "https://ejemplo.com/portada.jpg",
+  "genero": "Rock",
+  "formato": "Vinilo",
+  "precio": 10000,
+  "stock": 3
+}
+
+### Modificación (reemplazá ID_NUEVO)
+PUT {{api}}/albumes/ID_NUEVO
+Content-Type: application/json
+
+{
+  "titulo": "Compass (editado)",
+  "artista": "Mili",
+  "generos": ["Rock", "Pop"],
+  "formato": "CD",
+  "precio": 8000,
+  "stock": 5
+}
+
+### Baja (reemplazá ID_NUEVO)
+DELETE {{api}}/albumes/ID_NUEVO
+
+### Favoritos del usuario 1
+GET {{api}}/usuarios/1/favoritos
+
+### Agregar favorito (repetirlo devuelve 409)
+POST {{api}}/usuarios/1/favoritos
+Content-Type: application/json
+
+{ "albumId": "1458389375" }
+
+### Quitar favorito
+DELETE {{api}}/usuarios/1/favoritos/1458389375
+
+### Compra
+POST {{api}}/pedidos
+Content-Type: application/json
+
+{ "idProducto": 1, "cantidad": 1, "email": "usuario@gmail.com", "telefono": "11-4445-7753", "calle": "Los cerros", "altura": 4426 }
+
+### Compra con datos inválidos (devuelve el error de cada campo)
+POST {{api}}/pedidos
+Content-Type: application/json
+
+{ "idProducto": 1, "cantidad": 1, "email": "mal", "telefono": "x", "calle": "", "altura": 0 }
+
+### Compra sin stock suficiente (devuelve 409)
+POST {{api}}/pedidos
+Content-Type: application/json
+
+{ "idProducto": 1, "cantidad": 999, "email": "a@b.com", "telefono": "1144457753", "calle": "Mitre", "altura": 10 }
+
+### Listado de pedidos
+GET {{api}}/pedidos
+
+### Cancelar el pedido 4 (devuelve el stock)
+PATCH {{api}}/pedidos/4/estado
+Content-Type: application/json
+
+{ "estado": "cancelado" }
+
+### Estadísticas por género
+GET {{api}}/estadisticas/generos?limite=5
