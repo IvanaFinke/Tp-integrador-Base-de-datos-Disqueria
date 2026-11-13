@@ -100,13 +100,13 @@ export const Header = () => {
             cursor="pointer"
             _hover={{ opacity: 0.8 }}
           >
-            {/* <Image
+            <Image
               src="https://i.pravatar.cc/150?img=11"
               alt="Usuario"
               boxSize="32px"
               borderRadius="full"
               objectFit="cover"
-            /> */}
+            />
             <Text fontSize="sm" fontWeight="semibold" color="#fff">
               Usuario
             </Text>
