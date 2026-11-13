@@ -26,10 +26,30 @@ export const AlbumDetailView = () => {
     if (id) {
       api.getAlbumById(id).then(data => {
         setAlbum(data || null);
+        if (data) {
+          const savedFavorites: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
+          setIsFavorite(savedFavorites.includes(data.id));
+        }
         setLoading(false);
       });
     }
   }, [id]);
+
+  const handleToggleFavorite = () => {
+    if (!album) return;
+    const savedFavorites: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
+    let updated: string[];
+
+    if (savedFavorites.includes(album.id)) {
+      updated = savedFavorites.filter(favId => favId !== album.id);
+      setIsFavorite(false);
+    } else {
+      updated = [...savedFavorites, album.id];
+      setIsFavorite(true);
+    }
+
+    localStorage.setItem('favorite_albums', JSON.stringify(updated));
+  };
 
   if (loading) {
     return (
@@ -67,8 +87,19 @@ export const AlbumDetailView = () => {
               <Heading size="xl" color="#fff" mb="8px">{album.title}</Heading>
               <Text fontSize="lg" color="#b3b3b3" mb="24px">{album.artist}</Text>
             </Box>
-            <Box cursor="pointer" onClick={() => setIsFavorite(!isFavorite)}>
-              <FiHeart size="24px" color="#fff" fill={isFavorite ? '#fff' : 'none'} />
+            <Box
+              as="button"
+              cursor="pointer"
+              onClick={handleToggleFavorite}
+              title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+              _hover={{ transform: 'scale(1.1)' }}
+              transition="transform 0.15s"
+            >
+              <FiHeart
+                size="24px"
+                color={isFavorite ? '#ff4d4f' : '#fff'}
+                fill={isFavorite ? '#ff4d4f' : 'none'}
+              />
             </Box>
           </Flex>
 

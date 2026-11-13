@@ -15,7 +15,6 @@ import { FaHeart } from 'react-icons/fa';
 
 export const ProfileView = () => {
   const [favoriteAlbums, setFavoriteAlbums] = useState<Album[]>([]);
-  const [formats, setFormats] = useState<Record<string, 'Vinilo' | 'CD'>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,13 +24,6 @@ export const ProfileView = () => {
       const favs = allAlbums.filter(album => savedIds.includes(album.id));
       
       setFavoriteAlbums(favs);
-
-      // Inicializar el selector de formato de cada álbum con su formato actual
-      const initialFormats: Record<string, 'Vinilo' | 'CD'> = {};
-      favs.forEach(album => {
-        initialFormats[album.id] = album.format;
-      });
-      setFormats(initialFormats);
     };
 
     loadFavorites();
@@ -50,13 +42,6 @@ export const ProfileView = () => {
     const updatedIds = savedIds.filter(favId => favId !== id);
     localStorage.setItem('favorite_albums', JSON.stringify(updatedIds));
     setFavoriteAlbums(prev => prev.filter(album => album.id !== id));
-  };
-
-  // Cambiar el formato en el selector blanco de la tarjeta
-  const handleFormatChange = (e: React.ChangeEvent<HTMLSelectElement>, id: string) => {
-    e.stopPropagation();
-    const newFormat = e.target.value as 'Vinilo' | 'CD';
-    setFormats(prev => ({ ...prev, [id]: newFormat }));
   };
 
   return (
@@ -100,7 +85,7 @@ export const ProfileView = () => {
               transition="background 0.2s"
               _hover={{ bg: '#2c2c2c' }}
             >
-              {/* Izquierda: Portada + Info + Selector de formato */}
+              {/* Izquierda: Portada + Info + Formato fijo */}
               <Flex align="center" gap="24px">
                 <Image
                   src={album.coverUrl}
@@ -117,31 +102,14 @@ export const ProfileView = () => {
                   <Text fontSize="sm" color="#e0e0e0" fontWeight="semibold" mb="6px">
                     {album.artist}
                   </Text>
-                  <Text fontSize="xs" color="#b3b3b3" mb="4px">
+                  <Text fontSize="xs" color="#b3b3b3" mb="2px">
                     Formato
                   </Text>
-
-                  {/* Selector blanco redondeado como en el mockup */}
-                  <Box onClick={(e) => e.stopPropagation()}>
-                    <select
-                      value={formats[album.id] || album.format}
-                      onChange={(e) => handleFormatChange(e, album.id)}
-                      style={{
-                        backgroundColor: '#ffffff',
-                        color: '#121212',
-                        fontWeight: 'bold',
-                        fontSize: '12px',
-                        padding: '3px 12px',
-                        borderRadius: '9999px',
-                        border: 'none',
-                        cursor: 'pointer',
-                        outline: 'none'
-                      }}
-                    >
-                      <option value="Vinilo">Vinilo</option>
-                      <option value="CD">CD</option>
-                    </select>
-                  </Box>
+                  
+                  {/* Muestra el formato estático que tiene cargado el álbum */}
+                  <Text fontSize="sm" color="#fff" fontWeight="bold">
+                    {album.format}
+                  </Text>
                 </Box>
               </Flex>
 
