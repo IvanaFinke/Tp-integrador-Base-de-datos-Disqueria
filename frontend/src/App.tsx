@@ -7,6 +7,7 @@ import { AlbumDetailView } from './views/AlbumDetalleView';
 import { CheckoutView } from './views/FormularioDeCompraView';
 import { AddAlbumView } from './views/AgregarAlbumView';
 import { EditAlbumView } from './views/EditarAlbumView';
+import { LoginView } from './views/LoginView';
 
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
         <Header />
         <main style={{ padding: '24px' }}>
           <Routes>
+            <Route path="/login" element={<LoginView />} />
             <Route path="/" element={<HomeView />} />
             <Route path="/album/:id" element={<AlbumDetailView />} />
             <Route path="/agregar" element={<AddAlbumView />} />

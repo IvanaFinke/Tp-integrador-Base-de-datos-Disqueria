@@ -33,6 +33,14 @@ let mockPedidos: Pedido[] = [
   { id: 4338, albumId: '1', albumTitle: 'Compass: A new Mili symphony', quantity: 2, userId: 2, address: 'Los cerros 2432', status: 'Pendiente' }
 ];
 
+
+
+
+let currentUser: { name: string; email: string } | null = {
+  name: 'Usuario',
+  email: 'usuario@mail.com'
+}; // Usuario por defecto para que no rompa lo que ya tenés
+
 export const api = {
   async getAlbums(): Promise<Album[]> {
     return mockAlbums;
@@ -51,5 +59,27 @@ export const api = {
   async updateOrderStatus(id: number, status: Pedido['status']): Promise<void> {
     const order = mockPedidos.find(o => o.id === id);
     if (order) order.status = status;
+  },
+
+
+///////////////////////////////////
+  async login(name: string, email: string): Promise<{ name: string; email: string }> {
+    currentUser = { name, email };
+    localStorage.setItem('logged_user', JSON.stringify(currentUser));
+    return currentUser;
+  },
+
+  async getCurrentUser(): Promise<{ name: string; email: string } | null> {
+    const saved = localStorage.getItem('logged_user');
+    return saved ? JSON.parse(saved) : currentUser;
+  },
+
+  async logout(): Promise<void> {
+    currentUser = null;
+    localStorage.removeItem('logged_user');
   }
+
+
+
+  
 };

@@ -19,10 +19,12 @@ export const ProfileView = () => {
 
   useEffect(() => {
     const loadFavorites = async () => {
+      // Obtenemos los álbumes desde el servicio/mock
       const allAlbums = await api.getAlbums();
       const savedIds: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
-      const favs = allAlbums.filter(album => savedIds.includes(album.id));
       
+      // Filtramos los que estén guardados como favoritos
+      const favs = allAlbums.filter(album => savedIds.includes(album.id));
       setFavoriteAlbums(favs);
     };
 
@@ -35,7 +37,7 @@ export const ProfileView = () => {
     setFavoriteAlbums([]);
   };
 
-  // Quitar un álbum específico de favoritos al hacer clic en su corazón
+  // Quitar un álbum específico de favoritos
   const handleRemoveFavorite = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     const savedIds: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
@@ -106,7 +108,6 @@ export const ProfileView = () => {
                     Formato
                   </Text>
                   
-                  {/* Muestra el formato estático que tiene cargado el álbum */}
                   <Text fontSize="sm" color="#fff" fontWeight="bold">
                     {album.format}
                   </Text>
@@ -132,7 +133,7 @@ export const ProfileView = () => {
                 </Box>
 
                 <Text fontSize="xl" fontWeight="extrabold" color="#fff">
-                  ${album.price}
+                  ${album.price.toLocaleString()}
                 </Text>
               </Flex>
             </Flex>
