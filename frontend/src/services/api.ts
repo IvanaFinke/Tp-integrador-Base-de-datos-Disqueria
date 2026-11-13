@@ -33,13 +33,34 @@ let mockPedidos: Pedido[] = [
   { id: 4338, albumId: '1', albumTitle: 'Compass: A new Mili symphony', quantity: 2, userId: 2, address: 'Los cerros 2432', status: 'Pendiente' }
 ];
 
+// Base de datos mock de usuarios
+const mockUsers = [
+  { 
+    name: 'Julieta', 
+    email: 'julieta@mail.com', 
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80' 
+  },
+  { 
+    name: 'Luz', 
+    email: 'luzquispe1999@gmail.com', 
+    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80' 
+  }
+];
+
+// Definimos la interfaz del usuario para que TypeScript no se queje de las propiedades
+export interface User {
+  name: string;
+  email: string;
+  avatarUrl: string;
+}
 
 
+let currentUser: User | null = null;
 
-let currentUser: { name: string; email: string } | null = {
-  name: 'Usuario',
-  email: 'usuario@mail.com'
-}; // Usuario por defecto para que no rompa lo que ya tenés
+// let currentUser: { name: string; email: string } | null = {
+//   name: 'Usuario',
+//   email: 'usuario@mail.com'
+// }; 
 
 export const api = {
   async getAlbums(): Promise<Album[]> {
@@ -63,15 +84,29 @@ export const api = {
 
 
 ///////////////////////////////////
-  async login(name: string, email: string): Promise<{ name: string; email: string }> {
-    currentUser = { name, email };
+ async login(name: string = '', email: string): Promise<User> {
+    // Busca en la "base de datos" mock si el email ya existe
+    const found = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    
+    // Si existe, trae su información; si es nuevo, le asigna un avatar por defecto
+    currentUser = found ? { ...found, name: name || found.name } : {
+      name: name || 'Usuario',
+      email,
+      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80'
+    };
+
     localStorage.setItem('logged_user', JSON.stringify(currentUser));
     return currentUser;
   },
 
-  async getCurrentUser(): Promise<{ name: string; email: string } | null> {
+  async getCurrentUser(): Promise<User | null> {
+    if (currentUser) return currentUser;
     const saved = localStorage.getItem('logged_user');
-    return saved ? JSON.parse(saved) : currentUser;
+    if (saved) {
+      currentUser = JSON.parse(saved) as User;
+      return currentUser;
+    }
+    return null; // Devuelve null si no hay sesión iniciada
   },
 
   async logout(): Promise<void> {

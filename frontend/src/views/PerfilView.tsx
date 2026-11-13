@@ -12,13 +12,24 @@ import {
   VStack
 } from '@chakra-ui/react';
 import { FaHeart } from 'react-icons/fa';
+import { FiLogOut } from 'react-icons/fi';
 
 export const ProfileView = () => {
   const [favoriteAlbums, setFavoriteAlbums] = useState<Album[]>([]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const loadFavorites = async () => {
+    const loadProfileData = async () => {
+      // Verificamos si hay un usuario logueado real
+      const currentUser = await api.getCurrentUser();
+      // Si currentUser existe y no es el invitado por defecto, consideramos que hay sesión activa
+      if (currentUser && currentUser.email !== 'invitado@mail.com') {
+        setIsLoggedIn(true);
+      } else {
+        setIsLoggedIn(false);
+      }
+
       // Obtenemos los álbumes desde el servicio/mock
       const allAlbums = await api.getAlbums();
       const savedIds: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
@@ -28,7 +39,7 @@ export const ProfileView = () => {
       setFavoriteAlbums(favs);
     };
 
-    loadFavorites();
+    loadProfileData();
   }, []);
 
   // Borrar todos los favoritos
@@ -46,8 +57,38 @@ export const ProfileView = () => {
     setFavoriteAlbums(prev => prev.filter(album => album.id !== id));
   };
 
+  // Cerrar sesión
+  const handleLogout = async () => {
+    await api.logout();
+    navigate('/');
+  };
+
   return (
     <Box maxW="950px" mx="auto" mt="16px">
+      {/* El botón de Cerrar sesión aparece ÚNICAMENTE si hay una sesión activa */}
+      {isLoggedIn && (
+        <Flex justify="flex-end" mb="24px">
+          <Button
+            onClick={handleLogout}
+            bg="transparent"
+            color="#ff4d4f"
+            border="1px solid"
+            borderColor="#ff4d4f"
+            size="sm"
+            px="16px"
+            borderRadius="sm"
+            fontWeight="bold"
+            display="flex"
+            alignItems="center"
+            gap="8px"
+            _hover={{ bg: 'rgba(255, 77, 79, 0.1)' }}
+          >
+            <FiLogOut size="16px" />
+            Cerrar sesión
+          </Button>
+        </Flex>
+      )}
+
       {/* Cabecera: Título "Mis favoritos" y botón rojo "Borrar favoritos" */}
       <Flex justify="space-between" align="center" mb="24px">
         <Heading size="lg" color="#fff" fontWeight="bold">

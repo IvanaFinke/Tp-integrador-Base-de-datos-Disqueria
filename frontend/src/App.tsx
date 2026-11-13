@@ -1,4 +1,6 @@
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { api } from './services/api';
 import { Header } from './components/Header';
 import { HomeView } from './views/HomeView';
 import { PedidosView } from './views/PedidosView';
@@ -11,9 +13,22 @@ import { LoginView } from './views/LoginView';
 import { Box, Button } from '@chakra-ui/react';
 import { FiUser } from 'react-icons/fi';
 
-// Componente del botón flotante para el Login
 const FloatingLoginButton = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // Cada vez que cambia la ruta, verificamos si hay un usuario logueado
+    api.getCurrentUser().then((user) => {
+      setIsLoggedIn(!!user);
+    });
+  }, [location]);
+
+  // Si ya inició sesión o si ya está en la pantalla de login, no mostramos el botón
+  if (isLoggedIn || location.pathname === '/login') {
+    return null;
+  }
 
   return (
     <Box
@@ -65,7 +80,6 @@ export function App() {
           </Routes>
         </main>
         
-        {/* Botón flotante fijo en la esquina inferior izquierda */}
         <FloatingLoginButton />
       </div>
     </Router>
