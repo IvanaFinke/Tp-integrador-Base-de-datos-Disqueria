@@ -11,11 +11,12 @@ import {
   Button,
   SimpleGrid
 } from '@chakra-ui/react';
-import { FiTrash2, FiSettings } from 'react-icons/fi';
+import { FiTrash2, FiSettings, FiHeart } from 'react-icons/fi';
 
 export const HomeView = () => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -28,6 +29,15 @@ export const HomeView = () => {
 
   useEffect(() => {
     loadAlbums();
+    // Cargar favoritos guardados en localStorage si existen
+    const savedFavorites = localStorage.getItem('favorite_albums');
+    if (savedFavorites) {
+      try {
+        setFavorites(JSON.parse(savedFavorites));
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }, []);
 
   const handleDeleteAlbum = async (e: React.MouseEvent, id: string) => {
@@ -40,6 +50,20 @@ export const HomeView = () => {
   const handleEditAlbum = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     navigate(`/editar/${id}`);
+  };
+
+  const handleToggleFavorite = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Evita que abra el detalle del álbum
+    setFavorites(prev => {
+      let updated;
+      if (prev.includes(id)) {
+        updated = prev.filter(favId => favId !== id);
+      } else {
+        updated = [...prev, id];
+      }
+      localStorage.setItem('favorite_albums', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const toggleSortOrder = () => {
@@ -101,76 +125,96 @@ export const HomeView = () => {
         </Text>
       ) : (
         <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 6 }} gap="16px">
-          {sortedAlbums.map((album) => (
-            <Box
-              key={album.id}
-              onClick={() => navigate(`/album/${album.id}`)}
-              bg="#181818"
-              borderRadius="md"
-              overflow="hidden"
-              cursor="pointer"
-              border="1px solid"
-              borderColor="#282828"
-              position="relative"
-              transition="all 0.2s"
-              _hover={{ borderColor: '#404040' }}
-            >
-              {/* Contenedor de la imagen con margen interior */}
-              <Box p="10px" pb="0">
-                <Box position="relative" borderRadius="sm" overflow="hidden">
-                  <Image
-                    src={album.coverUrl}
-                    alt={album.title}
-                    w="100%"
-                    h="160px"
-                    objectFit="cover"
-                    borderRadius="sm"
-                  />
-                  {/* Botones superiores (Eliminar y Editar) */}
-                  <Flex position="absolute" top="6px" left="6px" gap="4px" zIndex="2">
+          {sortedAlbums.map((album) => {
+            const isFav = favorites.includes(album.id);
+            return (
+              <Box
+                key={album.id}
+                onClick={() => navigate(`/album/${album.id}`)}
+                bg="#181818"
+                borderRadius="md"
+                overflow="hidden"
+                cursor="pointer"
+                border="1px solid"
+                borderColor="#282828"
+                position="relative"
+                transition="all 0.2s"
+                _hover={{ borderColor: '#404040' }}
+              >
+                {/* Contenedor de la imagen con margen interior */}
+                <Box p="10px" pb="0">
+                  <Box position="relative" borderRadius="sm" overflow="hidden">
+                    <Image
+                      src={album.coverUrl}
+                      alt={album.title}
+                      w="100%"
+                      h="160px"
+                      objectFit="cover"
+                      borderRadius="sm"
+                    />
+                    {/* Botones superiores (Eliminar y Editar a la izquierda) */}
+                    <Flex position="absolute" top="6px" left="6px" gap="4px" zIndex="2">
+                      <Box
+                        as="button"
+                        onClick={(e) => handleDeleteAlbum(e, album.id)}
+                        bg="#dc3545"
+                        color="#fff"
+                        p="5px"
+                        borderRadius="sm"
+                        _hover={{ opacity: 0.8 }}
+                      >
+                        <FiTrash2 size="13px" />
+                      </Box>
+                      <Box
+                        as="button"
+                        onClick={(e) => handleEditAlbum(e, album.id)}
+                        bg="#0d6efd"
+                        color="#fff"
+                        p="5px"
+                        borderRadius="sm"
+                        _hover={{ opacity: 0.8 }}
+                      >
+                        <FiSettings size="13px" />
+                      </Box>
+                    </Flex>
+
+                    {/* Botón de Favorito (Corazón a la derecha) */}
                     <Box
                       as="button"
-                      onClick={(e) => handleDeleteAlbum(e, album.id)}
-                      bg="#dc3545"
-                      color="#fff"
+                      onClick={(e) => handleToggleFavorite(e, album.id)}
+                      position="absolute"
+                      top="6px"
+                      right="6px"
+                      bg="rgba(0,0,0,0.6)"
+                      color={isFav ? '#ff4d4f' : '#fff'}
                       p="5px"
                       borderRadius="sm"
-                      _hover={{ opacity: 0.8 }}
+                      zIndex="2"
+                      _hover={{ opacity: 0.9 }}
                     >
-                      <FiTrash2 size="13px" />
+                      <FiHeart size="15px" fill={isFav ? '#ff4d4f' : 'none'} />
                     </Box>
-                    <Box
-                      as="button"
-                      onClick={(e) => handleEditAlbum(e, album.id)}
-                      bg="#0d6efd"
-                      color="#fff"
-                      p="5px"
-                      borderRadius="sm"
-                      _hover={{ opacity: 0.8 }}
-                    >
-                      <FiSettings size="13px" />
-                    </Box>
-                  </Flex>
+                  </Box>
+                </Box>
+
+                {/* Información del álbum */}
+                <Box p="12px">
+                  <Heading size="xs" color="#fff" mb="4px">
+                    {album.title}
+                  </Heading>
+                  <Text fontSize="xs" color="#b3b3b3" mb="4px">
+                    {album.artist}
+                  </Text>
+                  <Text fontSize="xs" color="#888" mb="8px">
+                    {album.genre} {album.format}
+                  </Text>
+                  <Text fontSize="sm" fontWeight="bold" color="#fff">
+                    ${album.price.toLocaleString()}
+                  </Text>
                 </Box>
               </Box>
-
-              {/* Información del álbum */}
-              <Box p="12px">
-                <Heading size="xs" color="#fff" mb="4px">
-                  {album.title}
-                </Heading>
-                <Text fontSize="xs" color="#b3b3b3" mb="4px">
-                  {album.artist}
-                </Text>
-                <Text fontSize="xs" color="#888" mb="8px">
-                  {album.genre} {album.format}
-                </Text>
-                <Text fontSize="sm" fontWeight="bold" color="#fff">
-                  ${album.price.toLocaleString()}
-                </Text>
-              </Box>
-            </Box>
-          ))}
+            );
+          })}
         </SimpleGrid>
       )}
     </Box>
