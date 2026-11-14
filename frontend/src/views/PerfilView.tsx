@@ -23,16 +23,15 @@ export const ProfileView = () => {
     const loadProfileData = async () => {
       // Verificamos si hay un usuario logueado real
       const currentUser = await api.getCurrentUser();
-      // Si currentUser existe y no es el invitado por defecto, consideramos que hay sesión activa
       if (currentUser && currentUser.email !== 'invitado@mail.com') {
         setIsLoggedIn(true);
       } else {
         setIsLoggedIn(false);
       }
 
-      // Obtenemos los álbumes desde el servicio/mock
+      // Obtenemos los álbumes y los favoritos vinculados al usuario actual mediante la API
       const allAlbums = await api.getAlbums();
-      const savedIds: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
+      const savedIds: string[] = await api.getFavorites();
       
       // Filtramos los que estén guardados como favoritos
       const favs = allAlbums.filter(album => savedIds.includes(album.id));
@@ -42,18 +41,18 @@ export const ProfileView = () => {
     loadProfileData();
   }, []);
 
-  // Borrar todos los favoritos
-  const handleClearAllFavorites = () => {
-    localStorage.setItem('favorite_albums', JSON.stringify([]));
+  // Borrar todos los favoritos del usuario actual
+  const handleClearAllFavorites = async () => {
+    await api.saveFavorites([]);
     setFavoriteAlbums([]);
   };
 
-  // Quitar un álbum específico de favoritos
-  const handleRemoveFavorite = (e: React.MouseEvent, id: string) => {
+  // Quitar un álbum específico de los favoritos del usuario actual
+  const handleRemoveFavorite = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    const savedIds: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
+    const savedIds: string[] = await api.getFavorites();
     const updatedIds = savedIds.filter(favId => favId !== id);
-    localStorage.setItem('favorite_albums', JSON.stringify(updatedIds));
+    await api.saveFavorites(updatedIds);
     setFavoriteAlbums(prev => prev.filter(album => album.id !== id));
   };
 
@@ -165,8 +164,8 @@ export const ProfileView = () => {
                 <Box
                   as="button"
                   onClick={(e) => handleRemoveFavorite(e, album.id)}
-                  color="#b3b3b3"
-                  _hover={{ color: '#ff4d4f', transform: 'scale(1.1)' }}
+                  color="#ff4d4f"
+                  _hover={{ transform: 'scale(1.1)' }}
                   transition="all 0.15s"
                   title="Quitar de favoritos"
                 >

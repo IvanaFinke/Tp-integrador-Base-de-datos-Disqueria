@@ -23,21 +23,28 @@ export const AlbumDetailView = () => {
   const [isFavorite, setIsFavorite] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      api.getAlbumById(id).then(data => {
+    const loadAlbumDetail = async () => {
+      if (id) {
+        const data = await api.getAlbumById(id);
         setAlbum(data || null);
+        
         if (data) {
-          const savedFavorites: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
+          // Consultamos los favoritos del usuario actual a través de la API
+          const savedFavorites: string[] = await api.getFavorites();
           setIsFavorite(savedFavorites.includes(data.id));
         }
         setLoading(false);
-      });
-    }
+      }
+    };
+
+    loadAlbumDetail();
   }, [id]);
 
-  const handleToggleFavorite = () => {
+  const handleToggleFavorite = async () => {
     if (!album) return;
-    const savedFavorites: string[] = JSON.parse(localStorage.getItem('favorite_albums') || '[]');
+    
+    // Obtenemos la lista actual de favoritos del usuario actual
+    const savedFavorites: string[] = await api.getFavorites();
     let updated: string[];
 
     if (savedFavorites.includes(album.id)) {
@@ -48,7 +55,8 @@ export const AlbumDetailView = () => {
       setIsFavorite(true);
     }
 
-    localStorage.setItem('favorite_albums', JSON.stringify(updated));
+    // Guardamos utilizando la API para que impacte directamente en el perfil del usuario activo
+    await api.saveFavorites(updated);
   };
 
   if (loading) {

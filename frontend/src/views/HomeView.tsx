@@ -22,22 +22,19 @@ export const HomeView = () => {
 
   const searchQuery = (searchParams.get('q') || '').toLowerCase().trim();
 
-  const loadAlbums = async () => {
+  const loadHomeData = async () => {
     const data = await api.getAlbums();
-    setAlbums(data);
+    // Obtiene las recomendaciones: basadas en favoritos si hay sesión, o aleatorias si es invitado
+    const recommendedAlbums = await api.getRecommendations(data);
+    setAlbums(recommendedAlbums);
+
+    // Carga los favoritos específicos del usuario actual (o invitado) desde la API
+    const userFavorites = await api.getFavorites();
+    setFavorites(userFavorites);
   };
 
   useEffect(() => {
-    loadAlbums();
-    // Cargar favoritos guardados en localStorage si existen
-    const savedFavorites = localStorage.getItem('favorite_albums');
-    if (savedFavorites) {
-      try {
-        setFavorites(JSON.parse(savedFavorites));
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    loadHomeData();
   }, []);
 
   const handleDeleteAlbum = async (e: React.MouseEvent, id: string) => {
@@ -45,6 +42,7 @@ export const HomeView = () => {
     const currentAlbums = await api.getAlbums();
     const filtered = currentAlbums.filter(a => a.id !== id);
     setAlbums(filtered);
+    // Nota: Si luego deseas persistir la eliminación en el catálogo general, puedes actualizar el localStorage de 'catalog_albums' aquí.
   };
 
   const handleEditAlbum = (e: React.MouseEvent, id: string) => {
@@ -52,18 +50,18 @@ export const HomeView = () => {
     navigate(`/editar/${id}`);
   };
 
-  const handleToggleFavorite = (e: React.MouseEvent, id: string) => {
+  const handleToggleFavorite = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Evita que abra el detalle del álbum
-    setFavorites(prev => {
-      let updated;
-      if (prev.includes(id)) {
-        updated = prev.filter(favId => favId !== id);
-      } else {
-        updated = [...prev, id];
-      }
-      localStorage.setItem('favorite_albums', JSON.stringify(updated));
-      return updated;
-    });
+    let updated: string[];
+    if (favorites.includes(id)) {
+      updated = favorites.filter(favId => favId !== id);
+    } else {
+      updated = [...favorites, id];
+    }
+    
+    setFavorites(updated);
+    // Guarda los favoritos vinculados al usuario actual en la API / localStorage
+    await api.saveFavorites(updated);
   };
 
   const toggleSortOrder = () => {
