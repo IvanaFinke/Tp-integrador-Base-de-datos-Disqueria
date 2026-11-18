@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
-import type { Album } from '../types';
+import { api, ApiError, onErrorPortada } from '../services/api';
+import type { AlbumDetalle } from '../types';
 import {
   Box,
   Flex,
@@ -18,21 +18,26 @@ import { FiHeart, FiStar } from 'react-icons/fi';
 export const AlbumDetailView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [album, setAlbum] = useState<Album | null>(null);
+  const [album, setAlbum] = useState<AlbumDetalle | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
+  const [idProducto, setIdProducto] = useState<number | null>(null);
 
   useEffect(() => {
     const loadAlbumDetail = async () => {
-      if (id) {
+      if (!id) return;
+      try {
         const data = await api.getAlbumById(id);
         setAlbum(data || null);
-        
+        setIdProducto(data?.productos[0]?.idProducto ?? null);
         if (data) {
-          // Consultamos los favoritos del usuario actual a través de la API
-          const savedFavorites: string[] = await api.getFavorites();
+          const savedFavorites = await api.getFavorites();
           setIsFavorite(savedFavorites.includes(data.id));
         }
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'No se pudo cargar el álbum.');
+      } finally {
         setLoading(false);
       }
     };
@@ -42,22 +47,23 @@ export const AlbumDetailView = () => {
 
   const handleToggleFavorite = async () => {
     if (!album) return;
-    
-    // Obtenemos la lista actual de favoritos del usuario actual
-    const savedFavorites: string[] = await api.getFavorites();
-    let updated: string[];
-
-    if (savedFavorites.includes(album.id)) {
-      updated = savedFavorites.filter(favId => favId !== album.id);
-      setIsFavorite(false);
-    } else {
-      updated = [...savedFavorites, album.id];
-      setIsFavorite(true);
+    if (!(await api.getCurrentUser())) {
+      navigate('/login');
+      return;
     }
-
-    // Guardamos utilizando la API para que impacte directamente en el perfil del usuario activo
-    await api.saveFavorites(updated);
+    try {
+      if (isFavorite) {
+        await api.removeFavorite(album.id);
+      } else {
+        await api.addFavorite(album.id);
+      }
+      setIsFavorite(!isFavorite);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'No se pudo actualizar favoritos.');
+    }
   };
+
+  const producto = album?.productos.find(p => p.idProducto === idProducto);
 
   if (loading) {
     return (
@@ -70,7 +76,7 @@ export const AlbumDetailView = () => {
   if (!album) {
     return (
       <Box textAlign="center" mt="40px">
-        <Text color="#b3b3b3">Álbum no encontrado.</Text>
+        <Text color={error ? '#ff4d4f' : '#b3b3b3'}>{error || 'Álbum no encontrado.'}</Text>
       </Box>
     );
   }
@@ -81,6 +87,7 @@ export const AlbumDetailView = () => {
       <Flex direction={{ base: 'column', md: 'row' }} gap="40px" mb="40px" align="start">
         <Image
           src={album.coverUrl}
+          onError={onErrorPortada}
           alt={album.title}
           boxSize={{ base: '100%', md: '380px' }}
           borderRadius="md"
@@ -93,7 +100,8 @@ export const AlbumDetailView = () => {
           <Flex justify="space-between" align="start">
             <Box>
               <Heading size="xl" color="#fff" mb="8px">{album.title}</Heading>
-              <Text fontSize="lg" color="#b3b3b3" mb="24px">{album.artist}</Text>
+              <Text fontSize="lg" color="#b3b3b3" mb="8px">{album.artist}</Text>
+              <Text fontSize="sm" color="#888" mb="24px">{album.genre}</Text>
             </Box>
             <Box
               as="button"
@@ -113,26 +121,45 @@ export const AlbumDetailView = () => {
 
           <Text fontSize="xs" color="#888" mb="6px">Formato</Text>
           <HStack mb="24px">
-            <Box
-              bg="#242424"
-              color="#fff"
-              px="14px"
-              py="6px"
-              borderRadius="full"
-              fontSize="sm"
-              border="1px solid"
-              borderColor="#333"
-            >
-              {album.format} ↓
-            </Box>
+            {album.productos.length === 0 ? (
+              <Text fontSize="sm" color="#b3b3b3">No disponible a la venta</Text>
+            ) : (
+              <select
+                value={idProducto ?? ''}
+                onChange={(e) => setIdProducto(Number(e.target.value))}
+                style={{
+                  backgroundColor: '#242424',
+                  color: '#fff',
+                  padding: '6px 14px',
+                  borderRadius: '999px',
+                  fontSize: '14px',
+                  border: '1px solid #333',
+                  cursor: 'pointer'
+                }}
+              >
+                {album.productos.map(p => (
+                  <option key={p.idProducto} value={p.idProducto}>{p.format}</option>
+                ))}
+              </select>
+            )}
           </HStack>
 
-          <Text fontSize="2xl" fontWeight="bold" color="#fff" mb="24px">
-            ${album.price.toLocaleString()}
-          </Text>
+          {producto && (
+            <>
+              <Text fontSize="2xl" fontWeight="bold" color="#fff" mb="4px">
+                ${producto.price.toLocaleString('es-AR')}
+              </Text>
+              <Text fontSize="xs" color={producto.stock > 0 ? '#888' : '#ff4d4f'} mb="24px">
+                {producto.stock > 0 ? `${producto.stock} unidades disponibles` : 'Sin stock'}
+              </Text>
+            </>
+          )}
+
+          {error && <Text color="#ff4d4f" fontSize="sm" mb="12px">{error}</Text>}
 
           <Button
-            onClick={() => navigate(`/comprar/${album.id}`)}
+            disabled={!producto || producto.stock === 0}
+            onClick={() => producto && navigate(`/comprar/${album.id}?producto=${producto.idProducto}`)}
             bg="#5e35b1"
             color="#fff"
             size="lg"
@@ -162,6 +189,7 @@ export const AlbumDetailView = () => {
               >
                 <HStack mb="8px" gap="10px">
                   <Text fontSize="sm" fontWeight="bold" color="#fff">Review by {review.author}</Text>
+                  {review.title && <Text fontSize="sm" color="#b3b3b3">· {review.title}</Text>}
                   <HStack gap="2px">
                     {[...Array(5)].map((_, i) => (
                       <FiStar

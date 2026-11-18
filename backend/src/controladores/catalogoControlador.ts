@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { CatalogoService } from "../servicios/CatalogoService";
 import { validarAlbum } from "../servicios/validaciones";
-import { idUsuarioDe, numeroQuery, ordenQuery } from "./helpers";
+import { idUsuarioOpcional, numeroQuery, ordenQuery } from "./helpers";
 
 const servicio = new CatalogoService();
 const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
@@ -22,7 +22,7 @@ export const catalogoControlador = {
 
   // GET /api/recomendados?orden=asc|desc&limite=24
   async recomendados(req: Request, res: Response) {
-    res.json(await servicio.recomendados(idUsuarioDe(req), ordenQuery(req.query.orden), numeroQuery(req.query.limite, 24, 100)));
+    res.json(await servicio.recomendados(idUsuarioOpcional(req), ordenQuery(req.query.orden), numeroQuery(req.query.limite, 24, 100)));
   },
 
   // GET /api/albumes/:id

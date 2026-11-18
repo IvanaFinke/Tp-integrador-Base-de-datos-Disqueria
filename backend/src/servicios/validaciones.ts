@@ -22,6 +22,8 @@ export function validarAlbum(body: any, productoObligatorio: boolean): DatosAlbu
   if (!body || typeof body !== "object") throw solicitudInvalida("Body inválido");
 
   const artistaNombre = typeof body.artista === "object" ? body.artista?.nombre : body.artista;
+  const titulo = texto(body.titulo, "titulo");
+  const artista = texto(artistaNombre, "artista", 255);
   const imgUrl = body.imgUrl ?? body.img_url ?? null;
   if (imgUrl !== null && (typeof imgUrl !== "string" || (imgUrl.trim() && !/^https?:\/\//i.test(imgUrl.trim())))) {
     throw solicitudInvalida("'imgUrl' debe ser una URL http(s)");
@@ -32,9 +34,9 @@ export function validarAlbum(body: any, productoObligatorio: boolean): DatosAlbu
   if (!(generos as string[]).length) throw solicitudInvalida("Indicá al menos un género");
 
   const album: DatosAlbum = {
-    titulo: texto(body.titulo, "titulo"),
+    titulo,
     imgUrl: imgUrl?.trim() || null,
-    artista: { nombre: texto(artistaNombre, "artista", 255), mbid: body.artista?.mbid },
+    artista: { nombre: artista, mbid: body.artista?.mbid },
     generos: generos as string[],
   };
 

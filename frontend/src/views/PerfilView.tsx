@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
-import type { Album } from '../types';
+import { api, ApiError, onErrorPortada } from '../services/api';
+import type { AlbumDetalle } from '../types';
 import {
   Box,
   Flex,
@@ -15,27 +15,23 @@ import { FaHeart } from 'react-icons/fa';
 import { FiLogOut } from 'react-icons/fi';
 
 export const ProfileView = () => {
-  const [favoriteAlbums, setFavoriteAlbums] = useState<Album[]>([]);
+  const [favoriteAlbums, setFavoriteAlbums] = useState<AlbumDetalle[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [error, setError] = useState('');
+  const [cargando, setCargando] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     const loadProfileData = async () => {
-      // Verificamos si hay un usuario logueado real
       const currentUser = await api.getCurrentUser();
-      if (currentUser && currentUser.email !== 'invitado@mail.com') {
-        setIsLoggedIn(true);
-      } else {
-        setIsLoggedIn(false);
+      setIsLoggedIn(!!currentUser);
+      try {
+        if (currentUser) setFavoriteAlbums(await api.getFavoriteAlbums());
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'No se pudieron cargar los favoritos.');
+      } finally {
+        setCargando(false);
       }
-
-      // Obtenemos los álbumes y los favoritos vinculados al usuario actual mediante la API
-      const allAlbums = await api.getAlbums();
-      const savedIds: string[] = await api.getFavorites();
-      
-      // Filtramos los que estén guardados como favoritos
-      const favs = allAlbums.filter(album => savedIds.includes(album.id));
-      setFavoriteAlbums(favs);
     };
 
     loadProfileData();
@@ -43,18 +39,37 @@ export const ProfileView = () => {
 
   // Borrar todos los favoritos del usuario actual
   const handleClearAllFavorites = async () => {
-    await api.saveFavorites([]);
-    setFavoriteAlbums([]);
+    try {
+      await api.clearFavorites();
+      setFavoriteAlbums([]);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'No se pudieron borrar los favoritos.');
+    }
   };
 
   // Quitar un álbum específico de los favoritos del usuario actual
   const handleRemoveFavorite = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    const savedIds: string[] = await api.getFavorites();
-    const updatedIds = savedIds.filter(favId => favId !== id);
-    await api.saveFavorites(updatedIds);
-    setFavoriteAlbums(prev => prev.filter(album => album.id !== id));
+    try {
+      await api.removeFavorite(id);
+      setFavoriteAlbums(prev => prev.filter(album => album.id !== id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo quitar el favorito.');
+    }
   };
+
+  if (cargando) return null;
+
+  if (!isLoggedIn) {
+    return (
+      <Flex direction="column" align="center" mt="60px" gap="16px">
+        <Text color="#b3b3b3">Iniciá sesión para ver tus favoritos.</Text>
+        <Button onClick={() => navigate('/login?volver=/perfil')} bg="#6f42c1" color="#fff" size="sm">
+          Iniciar sesión
+        </Button>
+      </Flex>
+    );
+  }
 
   // Cerrar sesión
   const handleLogout = async () => {
@@ -107,6 +122,8 @@ export const ProfileView = () => {
         </Button>
       </Flex>
 
+      {error && <Text color="#ff4d4f" mb="16px">{error}</Text>}
+
       {/* Lista vertical de tarjetas horizontales */}
       {favoriteAlbums.length === 0 ? (
         <Text color="#b3b3b3" textAlign="center" mt="40px">
@@ -131,6 +148,7 @@ export const ProfileView = () => {
               <Flex align="center" gap="24px">
                 <Image
                   src={album.coverUrl}
+                  onError={onErrorPortada}
                   alt={album.title}
                   boxSize="110px"
                   borderRadius="24px"
@@ -149,7 +167,7 @@ export const ProfileView = () => {
                   </Text>
                   
                   <Text fontSize="sm" color="#fff" fontWeight="bold">
-                    {album.format}
+                    {album.productos.map(p => p.format).join(' / ') || 'No disponible'}
                   </Text>
                 </Box>
               </Flex>
@@ -172,9 +190,11 @@ export const ProfileView = () => {
                   <FaHeart size="20px" />
                 </Box>
 
-                <Text fontSize="xl" fontWeight="extrabold" color="#fff">
-                  ${album.price.toLocaleString()}
-                </Text>
+                {album.productos.length > 0 && (
+                  <Text fontSize="xl" fontWeight="extrabold" color="#fff">
+                    ${Math.min(...album.productos.map(p => p.price)).toLocaleString('es-AR')}
+                  </Text>
+                )}
               </Flex>
             </Flex>
           ))}

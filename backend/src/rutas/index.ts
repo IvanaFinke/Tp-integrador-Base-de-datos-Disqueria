@@ -2,11 +2,9 @@ import { Router } from "express";
 import { catalogoControlador as cat } from "../controladores/catalogoControlador";
 import { favoritoControlador as fav } from "../controladores/favoritoControlador";
 import { pedidoControlador as ped } from "../controladores/pedidoControlador";
-import { idUsuarioDe } from "../controladores/helpers";
 import { pool } from "../db/mysql";
 import { mongoDb } from "../db/mongo";
-import { noEncontrado } from "../dominio/errores";
-import { UsuarioRepository } from "../repositorios/mysql/UsuarioRepository";
+import { usuarioControlador as usu } from "../controladores/usuarioControlador";
 
 export const rutas = Router();
 
@@ -31,11 +29,8 @@ rutas.delete("/albumes/:id", cat.eliminar);
 rutas.get("/albumes/:id/resenias", cat.resenias);
 
 // Usuario y favoritos
-rutas.get("/usuarios/:idUsuario", async (req, res) => {
-  const u = await new UsuarioRepository().obtener(idUsuarioDe(req));
-  if (!u) throw noEncontrado("Usuario");
-  res.json(u);
-});
+rutas.post("/sesion", usu.iniciarSesion);
+rutas.get("/usuarios/:idUsuario", usu.obtener);
 rutas.get("/usuarios/:idUsuario/favoritos", fav.listar);
 rutas.post("/usuarios/:idUsuario/favoritos", fav.agregar);
 rutas.delete("/usuarios/:idUsuario/favoritos", fav.eliminarTodos);

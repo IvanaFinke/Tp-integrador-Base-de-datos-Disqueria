@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { api, ApiError } from '../services/api';
 import {
   Box,
   Flex,
@@ -12,20 +12,27 @@ import {
 } from '@chakra-ui/react';
 
 export const LoginView = () => {
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [ingresando, setIngresando] = useState(false);
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return;
-
-    // Guardamos la sesión en el mock/localStorage
-    await api.login(name, email);
-    
-    // Redirigimos al inicio o catálogo
-    navigate('/');
+    if (!email || !password) return;
+    setIngresando(true);
+    setError('');
+    try {
+      // Valida el usuario contra la tabla usuario de MySQL
+      await api.login(email, password);
+      const volver = searchParams.get('volver');
+      navigate(volver && volver.startsWith('/') ? volver : '/');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo iniciar sesión.');
+      setIngresando(false);
+    }
   };
 
   return (
@@ -48,21 +55,6 @@ export const LoginView = () => {
 
         <Box as="form" onSubmit={handleLogin}>
           <VStack gap="16px" align="stretch">
-            <Box>
-              <Text fontSize="sm" color="#b3b3b3" mb="6px">Nombre</Text>
-              <Input
-                placeholder="Tu nombre"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                bg="#242424"
-                border="1px solid"
-                borderColor="#333"
-                color="#fff"
-                _placeholder={{ color: '#666' }}
-                required
-              />
-            </Box>
-
             <Box>
               <Text fontSize="sm" color="#b3b3b3" mb="6px">Email</Text>
               <Input
@@ -95,6 +87,8 @@ export const LoginView = () => {
               />
             </Box>
 
+            {error && <Text fontSize="sm" color="#ff4d4f">{error}</Text>}
+
             <Button
               type="submit"
               bg="#6f42c1"
@@ -103,10 +97,15 @@ export const LoginView = () => {
               w="full"
               mt="8px"
               fontWeight="bold"
+              loading={ingresando}
               _hover={{ bg: '#5a329d' }}
             >
               INICIAR SESIÓN
             </Button>
+
+            <Text fontSize="xs" color="#888" textAlign="center">
+              Usuario de prueba: demo@disqueria.com · contraseña demo1234
+            </Text>
           </VStack>
         </Box>
       </Box>

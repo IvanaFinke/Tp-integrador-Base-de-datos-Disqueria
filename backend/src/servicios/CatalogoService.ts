@@ -37,8 +37,8 @@ export class CatalogoService {
     return { pagina, tamanio, total, items: armarItems(items, albumes) };
   }
 
-  async recomendados(idUsuario: number, orden: "asc" | "desc" | undefined, limite: number) {
-    const favoritos = (await this.favoritos.listar(idUsuario)).map((f) => f.albumId);
+  async recomendados(idUsuario: number | undefined, orden: "asc" | "desc" | undefined, limite: number) {
+    const favoritos = idUsuario ? (await this.favoritos.listar(idUsuario)).map((f) => f.albumId) : [];
     const albumes = await this.catalogo.recomendarPorFavoritos(favoritos, limite * 2);
     const productos = await this.productos.porAlbumes(albumes.map((a) => a.id));
     const items = armarItems(productos, albumes).slice(0, limite);

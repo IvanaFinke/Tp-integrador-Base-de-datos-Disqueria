@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, ApiError, onErrorPortada } from '../services/api';
 import type { Album } from '../types';
+import { Paginacion } from '../components/Paginacion';
 import {
   Box,
   Flex,
@@ -9,7 +10,8 @@ import {
   Text,
   Image,
   Button,
-  SimpleGrid
+  SimpleGrid,
+  Spinner
 } from '@chakra-ui/react';
 import { FiTrash2, FiSettings, FiHeart } from 'react-icons/fi';
 
@@ -17,32 +19,82 @@ export const HomeView = () => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [searchParams] = useSearchParams();
+  const [claveCargada, setClaveCargada] = useState('');
+  const [error, setError] = useState('');
+  const [total, setTotal] = useState(0);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const recomendadosRef = useRef<Album[] | null>(null);
 
-  const searchQuery = (searchParams.get('q') || '').toLowerCase().trim();
+  const searchQuery = (searchParams.get('q') || '').trim();
+  const verTodo = searchParams.get('ver') === 'todo';
+  const paginado = !!searchQuery || verTodo;
+  const pagina = Math.max(1, Number(searchParams.get('pagina')) || 1);
 
-  const loadHomeData = async () => {
-    const data = await api.getAlbums();
-    // Obtiene las recomendaciones: basadas en favoritos si hay sesión, o aleatorias si es invitado
-    const recommendedAlbums = await api.getRecommendations(data);
-    setAlbums(recommendedAlbums);
+  // Hasta que llegan los datos de la consulta actual se muestra "cargando"
+  const clave = `${searchQuery}|${verTodo}|${pagina}|${sortOrder}`;
+  const loading = claveCargada !== clave;
 
-    // Carga los favoritos específicos del usuario actual (o invitado) desde la API
-    const userFavorites = await api.getFavorites();
-    setFavorites(userFavorites);
+  // Recomendados por defecto; búsqueda o catálogo completo con páginas (espera a que se deje de tipear).
+  useEffect(() => {
+    let vigente = true;
+    const espera = setTimeout(async () => {
+      try {
+        if (paginado) {
+          const datos = await api.getCatalog(searchQuery, sortOrder, pagina);
+          if (vigente) {
+            setAlbums(datos.items);
+            setTotal(datos.total);
+            setTotalPaginas(datos.totalPaginas);
+          }
+        } else {
+          // Se guardan para que, al borrar la búsqueda, vuelvan los mismos recomendados
+          const datos = recomendadosRef.current ?? (await api.getRecommendations('asc'));
+          recomendadosRef.current = datos;
+          const ordenados = [...datos].sort((a, b) => (sortOrder === 'asc' ? a.price - b.price : b.price - a.price));
+          if (vigente) setAlbums(ordenados);
+        }
+        if (vigente) setError('');
+      } catch (e) {
+        console.error(e);
+        if (vigente) {
+          setAlbums([]);
+          setError(e instanceof Error ? e.message : 'No se pudieron cargar los álbumes.');
+        }
+      } finally {
+        if (vigente) setClaveCargada(clave);
+      }
+    }, searchQuery ? 300 : 0);
+    return () => {
+      vigente = false;
+      clearTimeout(espera);
+    };
+  }, [clave, searchQuery, paginado, pagina, sortOrder]);
+
+  // Cambia de página conservando la búsqueda o el modo catálogo
+  const cambiarPagina = (nueva: number) => {
+    const params = new URLSearchParams(searchParams);
+    if (nueva > 1) params.set('pagina', String(nueva));
+    else params.delete('pagina');
+    setSearchParams(params);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   useEffect(() => {
-    loadHomeData();
+    api.getFavorites().then(setFavorites).catch(() => setFavorites([]));
   }, []);
 
-  const handleDeleteAlbum = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteAlbum = async (e: React.MouseEvent, album: Album) => {
     e.stopPropagation();
-    const currentAlbums = await api.getAlbums();
-    const filtered = currentAlbums.filter(a => a.id !== id);
-    setAlbums(filtered);
-    // Nota: Si luego deseas persistir la eliminación en el catálogo general, puedes actualizar el localStorage de 'catalog_albums' aquí.
+    if (!window.confirm(`¿Eliminar "${album.title}" del catálogo?`)) return;
+    try {
+      await api.deleteAlbum(album.id);
+      setAlbums(prev => prev.filter(a => a.id !== album.id));
+      recomendadosRef.current = recomendadosRef.current?.filter(a => a.id !== album.id) ?? null;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo eliminar el álbum.');
+    }
   };
 
   const handleEditAlbum = (e: React.MouseEvent, id: string) => {
@@ -52,41 +104,45 @@ export const HomeView = () => {
 
   const handleToggleFavorite = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Evita que abra el detalle del álbum
-    let updated: string[];
-    if (favorites.includes(id)) {
-      updated = favorites.filter(favId => favId !== id);
-    } else {
-      updated = [...favorites, id];
+    if (!(await api.getCurrentUser())) {
+      navigate('/login');
+      return;
     }
-    
-    setFavorites(updated);
-    // Guarda los favoritos vinculados al usuario actual en la API / localStorage
-    await api.saveFavorites(updated);
+    try {
+      if (favorites.includes(id)) {
+        await api.removeFavorite(id);
+        setFavorites(prev => prev.filter(favId => favId !== id));
+      } else {
+        await api.addFavorite(id);
+        setFavorites(prev => [...prev, id]);
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo actualizar favoritos.');
+    }
   };
 
   const toggleSortOrder = () => {
     setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    if (pagina > 1) cambiarPagina(1);
   };
 
-  // 1. Filtrar por nombre de álbum o género
-  const filteredAlbums = albums.filter((album) => {
-    if (!searchQuery) return true;
-    return (
-      album.title.toLowerCase().includes(searchQuery) ||
-      album.genre.toLowerCase().includes(searchQuery)
-    );
-  });
-
-  // 2. Ordenar los álbumes filtrados según el precio
-  const sortedAlbums = [...filteredAlbums].sort((a, b) => {
-    return sortOrder === 'asc' ? a.price - b.price : b.price - a.price;
-  });
+  // El backend ya devuelve los álbumes filtrados y ordenados por precio
+  const sortedAlbums = albums;
 
   return (
     <Box maxW="1200px" mx="auto">
       {/* Cabecera de la sección */}
       <Flex justify="space-between" align="center" mb="16px">
-        <Heading size="lg" color="#fff">Recomendados</Heading>
+        <Box>
+          <Heading size="lg" color="#fff">
+            {searchQuery ? `Resultados para "${searchQuery}"` : verTodo ? 'Catálogo completo' : 'Recomendados'}
+          </Heading>
+          {paginado && !loading && total > 0 && (
+            <Text fontSize="xs" color="#888" mt="4px">
+              {total.toLocaleString('es-AR')} resultados · página {pagina} de {totalPaginas.toLocaleString('es-AR')}
+            </Text>
+          )}
+        </Box>
         <Button
           onClick={() => navigate('/agregar')}
           bg="#198754"
@@ -101,8 +157,8 @@ export const HomeView = () => {
         </Button>
       </Flex>
 
-      {/* Botón de ordenamiento por precio */}
-      <Flex mb="20px">
+      {/* Botón de ordenamiento por precio y cambio entre recomendados y catálogo completo */}
+      <Flex mb="20px" gap="8px">
         <Button
           onClick={toggleSortOrder}
           bg="#242424"
@@ -114,12 +170,33 @@ export const HomeView = () => {
         >
           Precio {sortOrder === 'asc' ? '↑' : '↓'}
         </Button>
+        {!searchQuery && (
+          <Button
+            onClick={() => setSearchParams(verTodo ? {} : { ver: 'todo' })}
+            bg="#242424"
+            color="#fff"
+            size="sm"
+            border="1px solid"
+            borderColor="#333"
+            _hover={{ bg: '#2a2a2a' }}
+          >
+            {verTodo ? 'Ver recomendados' : 'Ver catálogo completo'}
+          </Button>
+        )}
       </Flex>
 
+      {error && (
+        <Text color="#ff4d4f" mb="16px">{error}</Text>
+      )}
+
       {/* Grilla de álbumes o mensaje si no hay coincidencias */}
-      {sortedAlbums.length === 0 ? (
+      {loading ? (
+        <Flex justify="center" mt="40px">
+          <Spinner color="green.400" size="xl" />
+        </Flex>
+      ) : sortedAlbums.length === 0 ? (
         <Text color="#b3b3b3" textAlign="center" mt="40px">
-          No se encontraron álbumes para "{searchParams.get('q')}".
+          {searchQuery ? `No se encontraron álbumes para "${searchQuery}".` : 'No hay álbumes para mostrar.'}
         </Text>
       ) : (
         <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 6 }} gap="16px">
@@ -127,7 +204,7 @@ export const HomeView = () => {
             const isFav = favorites.includes(album.id);
             return (
               <Box
-                key={album.id}
+                key={album.idProducto}
                 onClick={() => navigate(`/album/${album.id}`)}
                 bg="#181818"
                 borderRadius="md"
@@ -144,6 +221,7 @@ export const HomeView = () => {
                   <Box position="relative" borderRadius="sm" overflow="hidden">
                     <Image
                       src={album.coverUrl}
+                      onError={onErrorPortada}
                       alt={album.title}
                       w="100%"
                       h="160px"
@@ -154,7 +232,8 @@ export const HomeView = () => {
                     <Flex position="absolute" top="6px" left="6px" gap="4px" zIndex="2">
                       <Box
                         as="button"
-                        onClick={(e) => handleDeleteAlbum(e, album.id)}
+                        onClick={(e) => handleDeleteAlbum(e, album)}
+                        title="Eliminar álbum"
                         bg="#dc3545"
                         color="#fff"
                         p="5px"
@@ -166,6 +245,7 @@ export const HomeView = () => {
                       <Box
                         as="button"
                         onClick={(e) => handleEditAlbum(e, album.id)}
+                        title="Modificar álbum"
                         bg="#0d6efd"
                         color="#fff"
                         p="5px"
@@ -197,23 +277,27 @@ export const HomeView = () => {
 
                 {/* Información del álbum */}
                 <Box p="12px">
-                  <Heading size="xs" color="#fff" mb="4px">
+                  <Heading size="xs" color="#fff" mb="4px" lineClamp={2} title={album.title}>
                     {album.title}
                   </Heading>
-                  <Text fontSize="xs" color="#b3b3b3" mb="4px">
+                  <Text fontSize="xs" color="#b3b3b3" mb="4px" lineClamp={1}>
                     {album.artist}
                   </Text>
-                  <Text fontSize="xs" color="#888" mb="8px">
-                    {album.genre} {album.format}
+                  <Text fontSize="xs" color="#888" mb="8px" lineClamp={1}>
+                    {album.format} · {album.genre}
                   </Text>
                   <Text fontSize="sm" fontWeight="bold" color="#fff">
-                    ${album.price.toLocaleString()}
+                    ${album.price.toLocaleString('es-AR')}
                   </Text>
                 </Box>
               </Box>
             );
           })}
         </SimpleGrid>
+      )}
+
+      {paginado && !loading && (
+        <Paginacion pagina={pagina} totalPaginas={totalPaginas} onCambiar={cambiarPagina} />
       )}
     </Box>
   );
