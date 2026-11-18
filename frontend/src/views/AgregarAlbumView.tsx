@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
+import { api, ApiError } from '../services/api';
 import {
   Box,
-  Flex,
   Heading,
   Text,
   Input,
@@ -19,25 +18,20 @@ export const AddAlbumView = () => {
   const [format, setFormat] = useState<'Vinilo' | 'CD'>('Vinilo');
   const [price, setPrice] = useState('');
   const [genre, setGenre] = useState('');
+  const [error, setError] = useState('');
+  const [guardando, setGuardando] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Obtener los álbumes actuales para simular el agregado en el mock
-    const albums = await api.getAlbums();
-    const newAlbum = {
-      id: String(Date.now()),
-      title: title || 'Sin título',
-      artist: artist || 'Desconocido',
-      coverUrl: coverUrl || 'https://i.imgur.com/34X4h0n.jpg',
-      format,
-      price: Number(price) || 10000,
-      genre: genre || 'General',
-      stock: 10
-    };
-
-    albums.unshift(newAlbum);
-    navigate('/');
+    setGuardando(true);
+    setError('');
+    try {
+      const id = await api.createAlbum({ title, artist, coverUrl, format, price: Number(price), genre });
+      navigate(`/album/${id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar el álbum.');
+      setGuardando(false);
+    }
   };
 
   return (
@@ -131,7 +125,7 @@ export const AddAlbumView = () => {
           </Box>
 
           <Box>
-            <Text fontSize="sm" color="#fff" mb="6px">Género</Text>
+            <Text fontSize="sm" color="#fff" mb="6px">Género (si son varios, separados por coma)</Text>
             <Input
               value={genre}
               onChange={(e) => setGenre(e.target.value)}
@@ -144,12 +138,15 @@ export const AddAlbumView = () => {
             />
           </Box>
 
+          {error && <Text color="#ff4d4f" fontSize="sm">{error}</Text>}
+
           <Button
             type="submit"
             bg="#3b82f6"
             color="#fff"
             mt="12px"
             w="120px"
+            loading={guardando}
             _hover={{ opacity: 0.9 }}
           >
             Guardar

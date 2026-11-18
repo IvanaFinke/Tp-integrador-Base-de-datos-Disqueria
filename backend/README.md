@@ -82,7 +82,19 @@ Body de alta/modificación (los campos del formulario del Figma):
 
 `genero` acepta un texto o se puede mandar `"generos": ["Rock", "Pop"]`. `stock` es opcional (10).
 
-### Favoritos (usuario fijo de prueba: 1)
+### Sesión
+
+| Método | Ruta | Body |
+|---|---|---|
+| POST | `/sesion` | `{ "email": "demo@disqueria.com", "contrasenia": "demo1234" }` → datos del usuario, o 401 |
+
+Valida email y contraseña contra la tabla `usuario` (la contraseña se guarda como hash SHA-256).
+Después del login, el frontend manda el header `X-Usuario-Id` en cada request. Sin ese header,
+`/recomendados` devuelve álbumes al azar.
+
+Usuarios de prueba (contraseña `demo1234` para los tres): `demo@disqueria.com`, `meel@disqueria.com`, `luz@disqueria.com`.
+
+### Favoritos
 
 | Método | Ruta | Body |
 |---|---|---|
@@ -112,7 +124,7 @@ Sin stock suficiente responde 409. Cancelar un pedido devuelve las unidades al s
 ### Otros
 
 `GET /salud`: estado de cada motor y qué datos maneja (sirve para mostrar en el front qué base se usa).
-`GET /usuarios/1`: datos del usuario.
+`GET /usuarios/:id`: datos del usuario.
 
 ## Estructura
 

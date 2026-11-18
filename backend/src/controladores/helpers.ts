@@ -9,6 +9,10 @@ export const idUsuarioDe = (req: Request): number => {
   return n;
 };
 
+// Usuario del header X-Usuario-Id, o undefined si no hay sesión.
+export const idUsuarioOpcional = (req: Request): number | undefined =>
+  req.header("X-Usuario-Id") ? idUsuarioDe(req) : undefined;
+
 export const numeroQuery = (v: unknown, porDefecto: number, max: number) => {
   const n = Number(v);
   return Number.isInteger(n) && n > 0 ? Math.min(n, max) : porDefecto;

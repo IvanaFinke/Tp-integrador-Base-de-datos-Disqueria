@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
-import type { Album } from '../types';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { api, ApiError, onErrorPortada } from '../services/api';
+import type { AlbumDetalle } from '../types';
 import {
   Box,
   Flex,
@@ -11,56 +11,101 @@ import {
   Input,
   Button,
   VStack,
+  HStack,
   Spinner
 } from '@chakra-ui/react';
 import { FiCheckCircle } from 'react-icons/fi';
 
+type Campo = 'email' | 'telefono' | 'calle' | 'altura';
+
 export const CheckoutView = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  const [album, setAlbum] = useState<Album | null>(null);
+  const [album, setAlbum] = useState<AlbumDetalle | null>(null);
   const [loading, setLoading] = useState(true);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState('');
+  const [errores, setErrores] = useState<Partial<Record<Campo, string>>>({});
 
   // Estado para controlar el toast verde flotante
   const [successToast, setSuccessToast] = useState<{ id: number; price: number } | null>(null);
 
   // Campos del formulario
-  const [mail, setMail] = useState('usuario@gmail.com');
-  const [telefono, setTelefono] = useState('11-4445-7753');
-  const [calle, setCalle] = useState('Los cerros');
-  const [altura, setAltura] = useState('4426');
+  const [cantidad, setCantidad] = useState(1);
+  const [mail, setMail] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [calle, setCalle] = useState('');
+  const [altura, setAltura] = useState('');
 
   useEffect(() => {
-    if (id) {
-      api.getAlbumById(id).then(data => {
-        setAlbum(data || null);
+    const cargar = async () => {
+      const user = await api.getCurrentUser();
+      if (!user) {
+        navigate(`/login?volver=${encodeURIComponent(location.pathname + location.search)}`);
+        return;
+      }
+      setMail(user.email);
+      if (!id) return;
+      try {
+        setAlbum((await api.getAlbumById(id)) || null);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'No se pudo cargar el álbum.');
+      } finally {
         setLoading(false);
-      });
-    }
-  }, [id]);
+      }
+    };
+    cargar();
+  }, [id, navigate, location.pathname, location.search]);
+
+  const idProducto = Number(searchParams.get('producto'));
+  const producto = album?.productos.find(p => p.idProducto === idProducto) ?? album?.productos[0];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!album) return;
+    if (!album || !producto) return;
+    setEnviando(true);
+    setError('');
+    setErrores({});
+    try {
+      const newOrder = await api.createOrder({
+        idProducto: producto.idProducto,
+        cantidad,
+        email: mail,
+        telefono,
+        calle,
+        altura
+      });
 
-    // Crear pedido
-    const newOrder = await api.createOrder({
-      albumId: album.id,
-      albumTitle: album.title,
-      quantity: 1,
-      userId: 1,
-      address: `${calle} ${altura}`,
-      status: 'Pendiente'
-    });
+      // Activar el toast verde flotante
+      setSuccessToast({ id: newOrder.id, price: newOrder.total });
 
-    // Activar el toast verde flotante
-    setSuccessToast({ id: newOrder.id, price: album.price });
-
-    // Esperar 3 segundos para que se vea el toast antes de redirigir
-    setTimeout(() => {
-      navigate('/pedidos');
-    }, 3000);
+      // Esperar 3 segundos para que se vea el toast antes de redirigir
+      setTimeout(() => {
+        navigate('/pedidos');
+      }, 3000);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+        setErrores(err.errores ?? {});
+      } else {
+        setError('No se pudo realizar el pedido.');
+      }
+      setEnviando(false);
+    }
   };
+
+  const estiloInput = (campo: Campo) => ({
+    bg: '#242424',
+    border: '1px solid',
+    borderColor: errores[campo] ? '#ff4d4f' : '#333',
+    color: '#fff',
+    p: '10px'
+  });
+
+  const mensajeCampo = (campo: Campo) =>
+    errores[campo] ? <Text fontSize="xs" color="#ff4d4f" mt="4px">{errores[campo]}</Text> : null;
 
   if (loading) {
     return (
@@ -70,8 +115,8 @@ export const CheckoutView = () => {
     );
   }
 
-  if (!album) {
-    return <Text color="#b3b3b3" textAlign="center">Álbum no encontrado para compra.</Text>;
+  if (!album || !producto) {
+    return <Text color="#b3b3b3" textAlign="center">{error || 'Álbum no encontrado para compra.'}</Text>;
   }
 
   return (
@@ -94,7 +139,7 @@ export const CheckoutView = () => {
             <FiCheckCircle size="22px" />
             <Box>
               <Text fontWeight="bold" fontSize="sm">Se ha realizado el pedido</Text>
-              <Text fontSize="xs">#{successToast.id} - ${successToast.price.toLocaleString()}</Text>
+              <Text fontSize="xs">#{successToast.id} - ${successToast.price.toLocaleString('es-AR')}</Text>
             </Box>
           </Flex>
         </Box>
@@ -111,10 +156,11 @@ export const CheckoutView = () => {
         borderColor="#282828"
         mb="24px"
       >
-        <Flex align="center" justify="space-between">
+        <Flex align="center" justify="space-between" gap="16px">
           <Flex align="center" gap="16px">
             <Image
               src={album.coverUrl}
+              onError={onErrorPortada}
               alt={album.title}
               boxSize="60px"
               borderRadius="sm"
@@ -123,12 +169,34 @@ export const CheckoutView = () => {
             <Box>
               <Heading size="sm" color="#fff" mb="2px">{album.title}</Heading>
               <Text fontSize="xs" color="#b3b3b3" mb="2px">{album.artist}</Text>
-              <Text fontSize="xs" color="#888">Formato {album.format}</Text>
+              <Text fontSize="xs" color="#888">Formato {producto.format}</Text>
             </Box>
           </Flex>
           <Box textAlign="right">
-            <Text fontSize="xs" color="#888">cant 1 unid.</Text>
-            <Text fontSize="md" fontWeight="bold" color="#fff">${album.price.toLocaleString()}</Text>
+            <HStack justify="flex-end" gap="6px" mb="4px">
+              <Button
+                size="xs"
+                bg="#242424"
+                color="#fff"
+                onClick={() => setCantidad(c => Math.max(1, c - 1))}
+                disabled={cantidad <= 1}
+              >
+                −
+              </Button>
+              <Text fontSize="xs" color="#888" minW="70px" textAlign="center">cant {cantidad} unid.</Text>
+              <Button
+                size="xs"
+                bg="#242424"
+                color="#fff"
+                onClick={() => setCantidad(c => Math.min(producto.stock, c + 1))}
+                disabled={cantidad >= producto.stock}
+              >
+                +
+              </Button>
+            </HStack>
+            <Text fontSize="md" fontWeight="bold" color="#fff">
+              ${(producto.price * cantidad).toLocaleString('es-AR')}
+            </Text>
           </Box>
         </Flex>
       </Box>
@@ -146,16 +214,8 @@ export const CheckoutView = () => {
         <VStack gap="16px" align="stretch">
           <Box>
             <Text fontSize="sm" color="#fff" mb="6px">Mail</Text>
-            <Input
-              type="email"
-              value={mail}
-              onChange={(e) => setMail(e.target.value)}
-              bg="#242424"
-              border="1px solid"
-              borderColor="#333"
-              color="#fff"
-              p="10px"
-            />
+            <Input type="email" value={mail} onChange={(e) => setMail(e.target.value)} {...estiloInput('email')} />
+            {mensajeCampo('email')}
           </Box>
 
           <Box>
@@ -164,12 +224,10 @@ export const CheckoutView = () => {
               type="text"
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
-              bg="#242424"
-              border="1px solid"
-              borderColor="#333"
-              color="#fff"
-              p="10px"
+              placeholder="11-4445-7753"
+              {...estiloInput('telefono')}
             />
+            {mensajeCampo('telefono')}
           </Box>
 
           <Box>
@@ -178,12 +236,10 @@ export const CheckoutView = () => {
               type="text"
               value={calle}
               onChange={(e) => setCalle(e.target.value)}
-              bg="#242424"
-              border="1px solid"
-              borderColor="#333"
-              color="#fff"
-              p="10px"
+              placeholder="Los cerros"
+              {...estiloInput('calle')}
             />
+            {mensajeCampo('calle')}
           </Box>
 
           <Box>
@@ -192,13 +248,13 @@ export const CheckoutView = () => {
               type="text"
               value={altura}
               onChange={(e) => setAltura(e.target.value)}
-              bg="#242424"
-              border="1px solid"
-              borderColor="#333"
-              color="#fff"
-              p="10px"
+              placeholder="4426"
+              {...estiloInput('altura')}
             />
+            {mensajeCampo('altura')}
           </Box>
+
+          {error && <Text color="#ff4d4f" fontSize="sm">{error}</Text>}
 
           <Button
             type="submit"
@@ -206,6 +262,8 @@ export const CheckoutView = () => {
             color="#fff"
             mt="12px"
             w="120px"
+            loading={enviando}
+            disabled={producto.stock === 0 || !!successToast}
             _hover={{ opacity: 0.9 }}
           >
             Comprar

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../services/api';
+import { api, ApiError } from '../services/api';
 import type { User } from '../services/api';
 import type { Pedido } from '../types';
 import {
@@ -14,25 +14,33 @@ export const PedidosView = () => {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const loadOrdersData = async () => {
       const user = await api.getCurrentUser();
       setCurrentUser(user);
-
-      const data = await api.getOrders();
-      setPedidos(data);
-      setLoading(false);
+      try {
+        setPedidos(await api.getOrders());
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'No se pudieron cargar los pedidos.');
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadOrdersData();
   }, []);
 
+  // Cancelar devuelve el stock; reactivar un cancelado lo vuelve a descontar
   const handleStatusChange = async (id: number, newStatus: Pedido['status']) => {
-    await api.updateOrderStatus(id, newStatus);
-    setPedidos(prev => 
-      prev.map(p => p.id === id ? { ...p, status: newStatus } : p)
-    );
+    setError('');
+    try {
+      const actualizado = await api.updateOrderStatus(id, newStatus);
+      setPedidos(prev => prev.map(p => (p.id === id ? actualizado : p)));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'No se pudo cambiar el estado.');
+    }
   };
 
   // Función para obtener los colores de fondo y texto según el estado
@@ -42,8 +50,6 @@ export const PedidosView = () => {
         return { bg: '#198754', color: '#fff' };
       case 'Pendiente':
         return { bg: '#ffc107', color: '#000' };
-      case 'En camino':
-        return { bg: '#0dcaf0', color: '#000' };
       case 'Cancelado':
         return { bg: '#dc3545', color: '#fff' };
       default:
@@ -62,6 +68,8 @@ export const PedidosView = () => {
   return (
     <Box maxW="1100px" mx="auto">
       <Heading size="lg" color="#fff" mb="24px">Mis Pedidos</Heading>
+
+      {error && <Text color="#ff4d4f" mb="16px">{error}</Text>}
 
       {!currentUser ? (
         <Text color="#b3b3b3" textAlign="center" mt="40px">
@@ -106,13 +114,13 @@ export const PedidosView = () => {
                       {pedido.id}
                     </Box>
                     <Box as="td" p="16px" fontSize="sm" color="#fff">
-                      {pedido.albumTitle || pedido.albumId}
+                      {pedido.albumTitle} ({pedido.format})
                     </Box>
                     <Box as="td" p="16px" fontSize="sm" fontWeight="bold" color="#fff">
                       {pedido.quantity}
                     </Box>
                     <Box as="td" p="16px" fontSize="sm" color="#fff">
-                      {currentUser.name}
+                      {pedido.userName}
                     </Box>
                     <Box as="td" p="16px" fontSize="sm" color="#b3b3b3">
                       {pedido.address}
@@ -137,7 +145,6 @@ export const PedidosView = () => {
                       >
                         <option value="Pendiente" style={{ background: '#ffc107', color: '#000' }}>Pendiente</option>
                         <option value="Entregado" style={{ background: '#198754', color: '#fff' }}>Entregado</option>
-                        <option value="En camino" style={{ background: '#0dcaf0', color: '#000' }}>En camino</option>
                         <option value="Cancelado" style={{ background: '#dc3545', color: '#fff' }}>Cancelado</option>
                       </select>
                     </Box>

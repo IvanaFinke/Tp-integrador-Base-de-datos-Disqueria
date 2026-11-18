@@ -23,7 +23,7 @@ export const Header = () => {
     setQuery(searchParams.get('q') || '');
   }, [searchParams]);
 
-  // Cargar los datos reales del usuario desde la base de datos (mock)
+  // Muestra el usuario logueado (o invitado)
   useEffect(() => {
     api.getCurrentUser().then((user) => {
       if (user) {

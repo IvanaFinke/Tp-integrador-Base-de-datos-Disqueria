@@ -6,6 +6,12 @@
 ### Estado de las dos bases y qué guarda cada una
 GET {{api}}/salud
 
+### Iniciar sesión
+POST {{api}}/sesion
+Content-Type: application/json
+
+{ "email": "demo@disqueria.com", "contrasenia": "demo1234" }
+
 ### Inicio: recomendados ordenados por precio
 GET {{api}}/recomendados?orden=asc&limite=6
 
